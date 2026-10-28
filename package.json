@@ -1,0 +1,13 @@
+{
+  "name": "iot-temp-humidity-dashboard",
+  "version": "1.0.0",
+  "description": "MQTT 温湿度实时数据仪表盘",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "mqtt": "^5.10.1"
+  }
+}

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>历史数据曲线</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+            background: linear-gradient(135deg, #d6eaff 0%, #e6f3ff 50%, #cfe8ff 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            padding: 30px 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 32px;
+            color: #1a5276;
+            margin-bottom: 16px;
+        }
+
+        .nav {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .nav a {
+            color: #5dade2;
+            text-decoration: none;
+            font-size: 15px;
+        }
+
+        .nav a:hover { text-decoration: underline; }
+
+        .controls {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(26, 82, 118, 0.12);
+            padding: 20px 24px;
+            margin-bottom: 24px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .controls button {
+            background: #eaf4fd;
+            color: #1a5276;
+            border: 1px solid #b8d9f0;
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .controls button:hover { background: #d6eaff; }
+        .controls button.active { background: #5dade2; color: #fff; border-color: #5dade2; }
+
+        .controls input {
+            border: 1px solid #b8d9f0;
+            border-radius: 8px;
+            padding: 7px 10px;
+            font-size: 14px;
+            color: #333;
+        }
+
+        .controls .query-btn {
+            background: #1a5276;
+            color: #fff;
+            border-color: #1a5276;
+        }
+
+        .chart-box {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(26, 82, 118, 0.12);
+            padding: 24px;
+        }
+
+        .empty {
+            text-align: center;
+            color: #999;
+            padding: 40px;
+        }
+
+        @media (max-width: 480px) {
+            h1 { font-size: 24px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>历史数据曲线</h1>
+        <div class="nav"><a href="/">← 返回实时仪表盘</a></div>
+
+        <div class="controls">
+            <button data-range="hour" class="active">最近 1 小时</button>
+            <button data-range="today">今天</button>
+            <button data-range="latest">最近 200 条</button>
+            <input type="datetime-local" id="from" step="1">
+            <span>至</span>
+            <input type="datetime-local" id="to" step="1">
+            <button class="query-btn" id="customQuery">查询</button>
+        </div>
+
+        <div class="chart-box">
+            <canvas id="chart"></canvas>
+            <div class="empty" id="empty" style="display:none">该时间段暂无数据</div>
+        </div>
+    </div>
+
+    <script>
+        const chartEl = document.getElementById('chart');
+        const emptyEl = document.getElementById('empty');
+        const buttons = document.querySelectorAll('.controls button[data-range]');
+
+        const chart = new Chart(chartEl, {
+            type: 'line',
+            data: { labels: [], datasets: [] },
+            options: {
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    yTemp: {
+                        type: 'linear',
+                        position: 'left',
+                        title: { display: true, text: '温度 (℃)' }
+                    },
+                    yHumi: {
+                        type: 'linear',
+                        position: 'right',
+                        title: { display: true, text: '湿度 (%RH)' },
+                        grid: { drawOnChartArea: false }
+                    }
+                }
+            }
+        });
+
+        function fmt(d) {
+            const p = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
+                   `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+        }
+
+        function update(rows) {
+            emptyEl.style.display = rows.length ? 'none' : 'block';
+            chartEl.style.display = rows.length ? 'block' : 'none';
+            chart.data.labels = rows.map(r => r.time);
+            chart.data.datasets = [
+                {
+                    label: '温度 (℃)',
+                    data: rows.map(r => r.temperature),
+                    borderColor: '#e74c3c',
+                    backgroundColor: '#e74c3c',
+                    yAxisID: 'yTemp',
+                    tension: 0.3,
+                    pointRadius: 2
+                },
+                {
+                    label: '湿度 (%RH)',
+                    data: rows.map(r => r.humidity),
+                    borderColor: '#2e86c1',
+                    backgroundColor: '#2e86c1',
+                    yAxisID: 'yHumi',
+                    tension: 0.3,
+                    pointRadius: 2
+                }
+            ];
+            chart.update();
+        }
+
+        function loadRange(from, to) {
+            fetch(`/api/history/range?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
+                .then(r => r.json())
+                .then(update);
+        }
+
+        function load(range) {
+            const nowDate = new Date();
+            if (range === 'hour') {
+                loadRange(fmt(new Date(nowDate - 3600 * 1000)), fmt(nowDate));
+            } else if (range === 'today') {
+                const start = new Date(nowDate);
+                start.setHours(0, 0, 0, 0);
+                loadRange(fmt(start), fmt(nowDate));
+            } else {
+                // 最近 200 条：接口返回倒序，翻转为正序用于绘图
+                fetch('/api/history?limit=200')
+                    .then(r => r.json())
+                    .then(rows => update(rows.reverse()));
+            }
+        }
+
+        buttons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                buttons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                load(btn.dataset.range);
+            });
+        });
+
+        document.getElementById('customQuery').addEventListener('click', () => {
+            const f = document.getElementById('from').value;
+            const t = document.getElementById('to').value;
+            if (!f || !t) { alert('请选择起止时间'); return; }
+            buttons.forEach(b => b.classList.remove('active'));
+            loadRange(f.replace('T', ' '), t.replace('T', ' '));
+        });
+
+        // 默认加载最近 1 小时
+        load('hour');
+    </script>
+</body>
+</html>
